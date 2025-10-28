@@ -6,6 +6,8 @@ export component WelcomePage inherits Rectangle {
     callback next-clicked;
 
     background: Theme.bg-primary;
+    width: 1280px;
+    height: 720px;
 
     VerticalLayout {
         padding: 40px;
@@ -69,24 +71,37 @@ export component WelcomePage inherits Rectangle {
         }
 
         // Features - Pixel-style bullets
-        VerticalLayout {
-            spacing: 12px;
-            max-width: 550px;
+        HorizontalLayout {
+            alignment: center;
+            VerticalLayout {
+                spacing: 12px;
+                alignment: LayoutAlignment.center;
+                width: 750px;
+                HorizontalLayout {
+                    width: 730px;
+                    FeatureItem {
+                        text: "Self-hosted Minecraft server management";
+                        width: 350px;
+                    }
 
-            FeatureItem {
-                text: "Self-hosted Minecraft server management";
-            }
+                    FeatureItem {
+                        width: 350px;
+                        text: "Support for Forge, Fabric, Quilt, and NeoForge";
+                    }
+                }
 
-            FeatureItem {
-                text: "Support for Forge, Fabric, Quilt, and NeoForge";
-            }
+                HorizontalLayout {
+                    width: 730px;
+                    FeatureItem {
+                        width: 350px;
+                        text: "Mod browser for Modrinth and CurseForge";
+                    }
 
-            FeatureItem {
-                text: "Mod browser for Modrinth and CurseForge";
-            }
-
-            FeatureItem {
-                text: "Local installation - your data stays on your computer";
+                    FeatureItem {
+                        width: 350px;
+                        text: "Local installation - your data stays on your computer";
+                    }
+                }
             }
         }
 
