@@ -54,11 +54,14 @@ export component App inherits Window {
     callback launch-app;
 
     VerticalLayout {
+        alignment: LayoutAlignment.stretch;
+        visible: true;
         // Title bar
         TitleBar {
             app-icon: root.app-icon;
             border-top-left-radius: 14px;
             border-top-right-radius: 14px;
+            height: 40px;
             minimize-clicked => {
                 root.minimize-window();
             }
@@ -71,137 +74,134 @@ export component App inherits Window {
         }
 
         // Main content area with page transitions
-        Rectangle {
-            background: Theme.bg-primary;
-            vertical-stretch: 1;
+        VerticalBox {
+            alignment: LayoutAlignment.stretch;
+            spacing: 8px;
 
-            VerticalBox {
-                if current-page == Page.Welcome: WelcomePage {
-                    next-clicked => {
-                        current-page = Page.TermsOfService;
-                    }
-
-                    states [
-                        visible when current-page == Page.Welcome: {
-                            opacity: 1;
-                            in {
-                                animate opacity {
-                                    duration: 300ms;
-                                    easing: ease-in-out;
-                                }
-                            }
-                            out {
-                                animate opacity {
-                                    duration: 300ms;
-                                    easing: ease-in-out;
-                                }
-                            }
-                        }
-                    ]
+            if current-page == Page.Welcome: WelcomePage {
+                next-clicked => {
+                    current-page = Page.TermsOfService;
                 }
 
-                if current-page == Page.TermsOfService: TermsPage {
-                    tos-content: root.tos-content;
-                    accepted <=> tos-accepted;
-                    back-clicked => {
-                        current-page = Page.Welcome;
-                    }
-                    next-clicked => {
-                        current-page = Page.Location;
-                    }
-
-                    states [
-                        visible when current-page == Page.TermsOfService: {
-                            opacity: 1;
-                            in {
-                                animate opacity {
-                                    duration: 300ms;
-                                    easing: ease-in-out;
-                                }
-                            }
-                            out {
-                                animate opacity {
-                                    duration: 300ms;
-                                    easing: ease-in-out;
-                                }
+                states [
+                    visible when current-page == Page.Welcome: {
+                        opacity: 1;
+                        in {
+                            animate opacity {
+                                duration: 300ms;
+                                easing: ease-in-out;
                             }
                         }
-                    ]
-                }
-
-                if current-page == Page.Location: LocationPage {
-                    install-path <=> root.install-path;
-                    install-as-service <=> root.install-as-service;
-                    start-with-windows <=> root.start-with-windows;
-                    back-clicked => {
-                        current-page = Page.TermsOfService;
-                    }
-                    install-clicked => {
-                        current-page = Page.Installing;
-                        root.start-installation();
-                    }
-                    browse-clicked => {
-                        root.browse-folder();
-                    }
-
-                    states [
-                        visible when current-page == Page.Location: {
-                            opacity: 1;
-                            in {
-                                animate opacity {
-                                    duration: 300ms;
-                                    easing: ease-in-out;
-                                }
-                            }
-                            out {
-                                animate opacity {
-                                    duration: 300ms;
-                                    easing: ease-in-out;
-                                }
+                        out {
+                            animate opacity {
+                                duration: 300ms;
+                                easing: ease-in-out;
                             }
                         }
-                    ]
+                    }
+                ]
+            }
+            if current-page == Page.TermsOfService: TermsPage {
+                tos-content: root.tos-content;
+                accepted <=> tos-accepted;
+                back-clicked => {
+                    current-page = Page.Welcome;
+                }
+                next-clicked => {
+                    current-page = Page.Location;
                 }
 
-                if current-page == Page.Installing: InstallingPage {
-                    status-text: install-status;
-                    progress: install-progress;
-
-                    states [
-                        visible when current-page == Page.Installing: {
-                            opacity: 1;
-                            in {
-                                animate opacity {
-                                    duration: 300ms;
-                                    easing: ease-in-out;
-                                }
+                states [
+                    visible when current-page == Page.TermsOfService: {
+                        opacity: 1;
+                        in {
+                            animate opacity {
+                                duration: 300ms;
+                                easing: ease-in-out;
                             }
                         }
-                    ]
-                }
-
-                if current-page == Page.Complete: CompletePage {
-                    success: install-success;
-                    message: complete-message;
-                    launch-clicked => {
-                        root.launch-app();
-                    }
-                    finish-clicked => {
-                        root.request-exit-app();
-                    }
-
-                    states [
-                        visible when current-page == Page.Complete: {
-                            opacity: 1;
-                            in {
-                                animate opacity {
-                                    duration: 300ms;
-                                    easing: ease-in-out;
-                                }
+                        out {
+                            animate opacity {
+                                duration: 300ms;
+                                easing: ease-in-out;
                             }
                         }
-                    ]
+                    }
+                ]
+            }
+
+            if current-page == Page.Location: LocationPage {
+                install-path <=> root.install-path;
+                install-as-service <=> root.install-as-service;
+                start-with-windows <=> root.start-with-windows;
+                back-clicked => {
+                    current-page = Page.TermsOfService;
                 }
+                install-clicked => {
+                    current-page = Page.Installing;
+                    root.start-installation();
+                }
+                browse-clicked => {
+                    root.browse-folder();
+                }
+
+                states [
+                    visible when current-page == Page.Location: {
+                        opacity: 1;
+                        in {
+                            animate opacity {
+                                duration: 300ms;
+                                easing: ease-in-out;
+                            }
+                        }
+                        out {
+                            animate opacity {
+                                duration: 300ms;
+                                easing: ease-in-out;
+                            }
+                        }
+                    }
+                ]
+            }
+
+            if current-page == Page.Installing: InstallingPage {
+                status-text: install-status;
+                progress: install-progress;
+
+                states [
+                    visible when current-page == Page.Installing: {
+                        opacity: 1;
+                        in {
+                            animate opacity {
+                                duration: 300ms;
+                                easing: ease-in-out;
+                            }
+                        }
+                    }
+                ]
+            }
+
+            if current-page == Page.Complete: CompletePage {
+                success: install-success;
+                message: complete-message;
+                launch-clicked => {
+                    root.launch-app();
+                }
+                finish-clicked => {
+                    root.request-exit-app();
+                }
+
+                states [
+                    visible when current-page == Page.Complete: {
+                        opacity: 1;
+                        in {
+                            animate opacity {
+                                duration: 300ms;
+                                easing: ease-in-out;
+                            }
+                        }
+                    }
+                ]
             }
         }
     }
