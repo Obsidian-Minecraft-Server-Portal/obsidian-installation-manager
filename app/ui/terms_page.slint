@@ -1,0 +1,85 @@
+import {
+    ScrollView,
+    CheckBox,
+    VerticalBox,
+    HorizontalBox,
+} from "std-widgets.slint";
+import { Theme, CustomButton } from "common.slint";
+
+// Terms of Service page
+export component TermsPage inherits Rectangle {
+    in property <string> tos-content;
+    in-out property <bool> accepted: false;
+    callback back-clicked;
+    callback next-clicked;
+
+    background: Theme.bg-primary;
+
+    VerticalLayout {
+        padding: 40px;
+        spacing: 20px;
+
+        Text {
+            text: "Terms of Service";
+            color: Theme.text-primary;
+            font-size: 32px;
+            font-weight: 900;
+            letter-spacing: 1px;
+        }
+
+        Text {
+            text: "Please read and accept the terms to continue";
+            color: Theme.text-secondary;
+            font-size: 14px;
+        }
+
+        // TOS content scroll area
+        ScrollView {
+            vertical-stretch: 1;  // Fill available vertical space
+
+            VerticalLayout {
+                padding: 20px;
+
+                Text {
+                    text: tos-content;
+                    color: Theme.text-secondary;
+                    font-size: 13px;
+                    wrap: word-wrap;
+                }
+            }
+        }
+
+        // Acceptance checkbox
+        HorizontalLayout {
+            spacing: 12px;
+            height: 32px;
+
+            CheckBox {
+                checked <=> accepted;
+                text: "I accept the Terms of Service";
+            }
+        }
+
+        // Navigation buttons
+        HorizontalLayout {
+            spacing: 12px;
+            alignment: end;
+
+            CustomButton {
+                text: "Back";
+                clicked => {
+                    root.back-clicked();
+                }
+            }
+
+            CustomButton {
+                text: "Continue";
+                primary: true;
+                enabled: accepted;
+                clicked => {
+                    root.next-clicked();
+                }
+            }
+        }
+    }
+}

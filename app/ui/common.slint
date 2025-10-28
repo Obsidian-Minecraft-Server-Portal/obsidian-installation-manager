@@ -1,0 +1,171 @@
+// Common components and theme definitions
+
+// Theme colors - Following Obsidian Style Guide
+export global Theme {
+    in-out property <color> bg-primary: #0b0b0e;        // Background
+    in-out property <color> bg-secondary: #141414;      // Secondary background
+    in-out property <color> bg-tertiary: #1a1a1d;       // Tertiary background
+    in-out property <color> bg-hover: #252528;          // Hover state
+    in-out property <color> accent: #1bd96a;            // Primary green (style guide)
+    in-out property <color> accent-hover: #15b558;      // Darker green for hover
+    in-out property <color> accent-fg: #000000;         // Text on accent (style guide)
+    in-out property <color> text-primary: #ffffff;      // Primary text
+    in-out property <color> text-secondary: #eaeaea;    // Secondary text (style guide)
+    in-out property <color> text-tertiary: #a0a0a0;     // Tertiary text
+    in-out property <color> border: #2a2a2d;            // Borders
+    in-out property <color> success: #1bd96a;           // Success (primary green)
+    in-out property <color> error: #ff4444;             // Error/danger
+}
+
+// Feature item component with pixel-style bullet
+export component FeatureItem inherits HorizontalLayout {
+    in property <string> text;
+    spacing: 8px;
+    height: 28px;
+
+    // Pixel-style bullet point
+    Rectangle {
+        width: 6px;
+        height: 6px;
+        background: Theme.accent;
+        border-radius: 0px;
+        y: (parent.height - self.height) / 2;
+    }
+
+    Text {
+        text: root.text;
+        color: Theme.text-secondary;
+        font-size: 14px;
+        font-weight: 600;
+        vertical-alignment: center;
+    }
+}
+
+// Custom button component - Style Guide compliant (no rounded corners)
+export component CustomButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> enabled: true;
+    in property <bool> primary: false;
+    callback clicked <=> touch.clicked;
+
+    background: primary ? Theme.accent : Theme.bg-tertiary;
+    border-radius: 0px;  // Style guide: radius="none" - sharp corners
+    height: 42px;
+    min-width: 120px;
+
+    states [
+        hover when touch.has-hover && enabled: {
+            background: primary ? Theme.accent-hover : Theme.bg-hover;
+        }
+        disabled when !enabled: {
+            background: Theme.bg-secondary;
+            opacity: 0.5;
+        }
+    ]
+
+    touch := TouchArea {
+        enabled: parent.enabled;
+    }
+
+    Text {
+        text: root.text;
+        color: primary ? Theme.accent-fg : Theme.text-primary;
+        font-size: 14px;
+        font-weight: 700;  // Bold for better readability with pixel fonts
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
+// Title bar component
+export component TitleBar inherits Rectangle {
+    in property <image> app-icon;
+    callback minimize-clicked;
+    callback close-clicked;
+    callback drag-start(length, length);
+
+    background: Theme.bg-secondary;
+    height: 40px;
+
+    HorizontalLayout {
+        padding: 8px;
+        spacing: 12px;
+
+        // App icon and title
+        HorizontalLayout {
+            spacing: 8px;
+
+            if app-icon.width > 0: Image {
+                source: app-icon;
+                width: 24px;
+                height: 24px;
+            }
+
+            Text {
+                text: "Obsidian Installer";
+                color: Theme.text-primary;
+                font-size: 13px;
+                font-weight: 600;
+                vertical-alignment: center;
+            }
+        }
+
+        // Draggable area
+        drag-area := Rectangle {
+            TouchArea {
+                moved => {
+                    root.drag-start(self.mouse-x - self.pressed-x, self.mouse-y - self.pressed-y);
+                }
+            }
+        }
+
+        // Window controls
+        HorizontalLayout {
+            spacing: 2px;
+            width: 80px;
+
+            // Minimize
+            Rectangle {
+                width: 40px;
+                height: 32px;
+                background: min-touch.has-hover ? Theme.bg-hover : transparent;
+
+                min-touch := TouchArea {
+                    clicked => {
+                        root.minimize-clicked();
+                    }
+                }
+
+                Rectangle {
+                    width: 12px;
+                    height: 1px;
+                    background: Theme.text-secondary;
+                    y: parent.height / 2;
+                    x: (parent.width - self.width) / 2;
+                }
+            }
+
+            // Close
+            Rectangle {
+                width: 40px;
+                height: 32px;
+                background: close-touch.has-hover ? Theme.error : transparent;
+
+                close-touch := TouchArea {
+                    clicked => {
+                        root.close-clicked();
+                    }
+                }
+
+                // X icon
+                Text {
+                    text: "X";
+                    color: Theme.text-primary;
+                    font-size: 14px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+}

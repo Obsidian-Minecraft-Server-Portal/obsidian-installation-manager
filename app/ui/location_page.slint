@@ -1,0 +1,151 @@
+import { LineEdit, CheckBox, VerticalBox, HorizontalBox } from "std-widgets.slint";
+import { Theme, CustomButton } from "common.slint";
+
+// Location and options selection page
+export component LocationPage inherits Rectangle {
+    in-out property <string> install-path: "C:\\Program Files\\Obsidian";
+    in-out property <bool> install-as-service: true;
+    in-out property <bool> start-with-windows: false;
+    callback back-clicked;
+    callback install-clicked;
+    callback browse-clicked;
+
+    background: Theme.bg-primary;
+
+    VerticalLayout {
+        padding: 40px;
+        spacing: 16px;
+
+        // Header
+        Text {
+            text: "Installation Setup";
+            color: Theme.text-primary;
+            font-size: 28px;
+            font-weight: 900;
+            letter-spacing: 1px;
+        }
+
+        Text {
+            text: "Configure your Obsidian installation";
+            color: Theme.text-secondary;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        Rectangle { height: 20px; }
+
+        // Path input section
+        VerticalLayout {
+            spacing: 8px;
+
+            Text {
+                text: "Installation Path";
+                color: Theme.text-primary;
+                font-size: 15px;
+                font-weight: 700;
+            }
+
+            HorizontalLayout {
+                spacing: 12px;
+                height: 42px;
+
+                LineEdit {
+                    text <=> install-path;
+                    placeholder-text: "Enter installation path...";
+                    font-size: 13px;
+                    vertical-stretch: 0;
+                }
+
+                CustomButton {
+                    text: "Browse...";
+                    min-width: 100px;
+                    clicked => {
+                        root.browse-clicked();
+                    }
+                }
+            }
+
+            Text {
+                text: "Space required: ~500 MB";
+                color: Theme.text-tertiary;
+                font-size: 11px;
+            }
+        }
+
+        Rectangle { height: 24px; }
+
+        // Installation options section
+        VerticalLayout {
+            Text {
+                text: "Installation Options";
+                color: Theme.text-primary;
+                font-size: 15px;
+                font-weight: 700;
+            }
+
+            // Service option
+            VerticalLayout {
+                spacing: 6px;
+
+                CheckBox {
+                    checked <=> install-as-service;
+                    text: "Install as Windows Service";
+                }
+
+                Text {
+                    text: "Allows Obsidian to run in the background even when you're not logged in";
+                    color: Theme.text-tertiary;
+                    font-size: 11px;
+                    wrap: word-wrap;
+                }
+            }
+
+            Rectangle { height: 12px; }
+
+            // Startup option
+            VerticalLayout {
+                spacing: 6px;
+
+                CheckBox {
+                    checked <=> start-with-windows;
+                    text: "Start with Windows";
+                }
+
+                Text {
+                    text: "Automatically start Obsidian when Windows starts";
+                    color: Theme.text-tertiary;
+                    font-size: 11px;
+                    wrap: word-wrap;
+                }
+            }
+        }
+
+        // Spacer to push buttons to bottom
+        Rectangle {
+            vertical-stretch: 1;
+        }
+
+        // Navigation buttons
+        HorizontalLayout {
+            spacing: 12px;
+            alignment: end;
+            height: 42px;
+
+            CustomButton {
+                text: "Back";
+                clicked => {
+                    root.back-clicked();
+                }
+            }
+
+            CustomButton {
+                text: "Install";
+                primary: true;
+                enabled: install-path != "";
+                clicked => {
+                    root.install-clicked();
+                }
+            }
+        }
+    }
+}

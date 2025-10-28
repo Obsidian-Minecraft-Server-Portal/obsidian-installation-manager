@@ -1,167 +1,198 @@
-import {
-    Button,
-    StandardButton,
-    VerticalBox,
-    Spinner,
-    GridBox,
-    HorizontalBox,
-    LineEdit,
-} from "std-widgets.slint";
+import { VerticalBox } from "std-widgets.slint";
+import { Theme, TitleBar } from "common.slint";
+import { WelcomePage } from "welcome_page.slint";
+import { TermsPage } from "terms_page.slint";
+import { LocationPage } from "location_page.slint";
+import { InstallingPage } from "installing_page.slint";
+import { CompletePage } from "complete_page.slint";
+
+// Page enumeration
+export enum Page {
+    Welcome,
+    TermsOfService,
+    Location,
+    Installing,
+    Complete
+}
+
 export component App inherits Window {
-    in property <image> app-icon;
+    title: "Obsidian Installer";
+    // Minecraft fonts are embedded and registered at runtime (TTF format)
+    default-font-family: "Minecraft Seven v2";
+    background: Theme.bg-primary;
     no-frame: true;
-    resize-border-width: 5px;
-    title: "Installer - Obsidian Minecraft Server Panel";
-    width: 1280px;
-    background: #0b0b0e;
-    height: 720px;
-    icon: root.app-icon;
 
-    callback request_exit_app();
-    callback maximize_window(bool);
-    callback minimize_window();
-    callback toggle_maximize_window();
-    callback drag_window(length, length);
-    callback handle_resize(length, length);
+    // Fixed window size - not resizable
+    min-width: 1280px;
+    max-width: 1280px;
+    min-height: 720px;
+    max-height: 720px;
 
-    // Draggable title bar area
-    Rectangle {
-        background: #141414;
-        width: 100%;
-        height: 40px;
-        y: 0;
+    // Public properties
+    in-out property <image> app-icon;
+    in-out property <Page> current-page: Page.Welcome;
+    in-out property <string> tos-content;
+    in-out property <bool> tos-accepted: false;
+    in-out property <string> install-path: "C:\\Program Files\\Obsidian Minecraft Server Panel";
+    in-out property <bool> install-as-service: true;
+    in-out property <bool> start-with-windows: false;
+    in-out property <string> install-status: "Preparing...";
+    in-out property <float> install-progress: 0.0;
+    in-out property <bool> install-success: true;
+    in-out property <string> complete-message: "";
 
-        TouchArea {
-            height: 100%;
-            width: 100%;
-            y: 0;
-            x: 0;
+    // Callbacks
+    callback request-exit-app;
+    callback minimize-window;
+    callback drag-window(length, length);
+    callback browse-folder;
+    callback start-installation;
+    callback launch-app;
 
-            moved => {
-                drag_window(self.mouse-x - self.pressed-x, self.mouse-y - self.pressed-y)
+    VerticalLayout {
+        // Title bar
+        TitleBar {
+            app-icon: root.app-icon;
+            minimize-clicked => {
+                root.minimize-window();
+            }
+            close-clicked => {
+                root.request-exit-app();
+            }
+            drag-start(x, y) => {
+                root.drag-window(x, y);
             }
         }
 
-        HorizontalBox {
-            height: 100%;
-            Image {
-                width: 30px;
-                source: root.app-icon;
-            }
+        // Main content area with page transitions
+        Rectangle {
+            background: Theme.bg-primary;
 
-            Text {
-                vertical-alignment: center;
-                text: root.title;
-                font-size: 1.1rem;
-            }
-        }
-    }
+            if current-page == Page.Welcome: WelcomePage {
+                next-clicked => {
+                    current-page = Page.TermsOfService;
+                }
 
-    Rectangle {
-        background: exit-application-button-touch-area.has-hover ? #ff3333 : #111;
-        width: 40px;
-        height: 40px;
-        y: 0;
-        x: 1240px;
-        Text {
-            text: "X";
-            font-weight: 700;
-        }
-
-        exit-application-button-touch-area := TouchArea {
-            mouse-cursor: MouseCursor.pointer;
-            width: 100%;
-            height: 100%;
-            clicked => {
-                request_exit_app()
-            }
-        }
-    }
-
-    // Form
-    VerticalBox {
-        padding-top: 80px;
-        padding-left: 8rem;
-        padding-right: 8rem;
-        alignment: space-between;
-
-        VerticalBox {
-            Text {
-                text: "Installation Path";
-                horizontal-alignment: left;
-                font-size: 1.5rem;
-            }
-
-            HorizontalBox {
-                Rectangle {
-                    background: #141414;
-                    width: 100%;
-                    height: 40px;
-                    LineEdit {
-                        width: 100%;
-                        height: 100%;
-                        placeholder-text: "Installation Path";
+                states [
+                    visible when current-page == Page.Welcome: {
+                        opacity: 1;
+                        in {
+                            animate opacity {
+                                duration: 300ms;
+                                easing: ease-in-out;
+                            }
+                        }
+                        out {
+                            animate opacity {
+                                duration: 300ms;
+                                easing: ease-in-out;
+                            }
+                        }
                     }
-                }
-
-                Rectangle {
-                    background: #141414;
-                    width: 40px;
-                    height: 40px;
-                    Image {
-                        height: 30px;
-                        width: 30px;
-                    }
-                }
-            }
-        }
-
-        // Navigation Buttons
-        HorizontalBox {
-            alignment: center;
-            close-button := Rectangle {
-                width: 120px;
-                height: 32px;
-                background: cancel-button-touch-area.has-hover ? #3a3d41 : #2a2d31;
-
-                cancel-button-touch-area := TouchArea {
-                    mouse-cursor: MouseCursor.pointer;
-                    width: 100%;
-                    height: 100%;
-                    clicked => {
-                        request_exit_app()
-                    }
-                }
-
-                Text {
-                    text: "Cancel";
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                    color: white;
-                }
+                ]
             }
 
-            next-button := Rectangle {
-                width: 120px;
-                height: 32px;
-                background: next-button-touch-area.has-hover ? #2ce87c : #1bd96a;
+            if current-page == Page.TermsOfService: TermsPage {
+                tos-content: root.tos-content;
+                accepted <=> tos-accepted;
+                back-clicked => {
+                    current-page = Page.Welcome;
+                }
+                next-clicked => {
+                    current-page = Page.Location;
+                }
 
-                next-button-touch-area := TouchArea {
-                    mouse-cursor: MouseCursor.pointer;
-                    width: 100%;
-                    height: 100%;
-                    clicked => {
-                        request_exit_app()
+                states [
+                    visible when current-page == Page.TermsOfService: {
+                        opacity: 1;
+                        in {
+                            animate opacity {
+                                duration: 300ms;
+                                easing: ease-in-out;
+                            }
+                        }
+                        out {
+                            animate opacity {
+                                duration: 300ms;
+                                easing: ease-in-out;
+                            }
+                        }
                     }
+                ]
+            }
+
+            if current-page == Page.Location: LocationPage {
+                install-path <=> root.install-path;
+                install-as-service <=> root.install-as-service;
+                start-with-windows <=> root.start-with-windows;
+                back-clicked => {
+                    current-page = Page.TermsOfService;
+                }
+                install-clicked => {
+                    current-page = Page.Installing;
+                    root.start-installation();
+                }
+                browse-clicked => {
+                    root.browse-folder();
                 }
 
-                Text {
-                    text: "Next";
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                    color: black;
-                    font-weight: 700;
+                states [
+                    visible when current-page == Page.Location: {
+                        opacity: 1;
+                        in {
+                            animate opacity {
+                                duration: 300ms;
+                                easing: ease-in-out;
+                            }
+                        }
+                        out {
+                            animate opacity {
+                                duration: 300ms;
+                                easing: ease-in-out;
+                            }
+                        }
+                    }
+                ]
+            }
+
+            if current-page == Page.Installing: InstallingPage {
+                status-text: install-status;
+                progress: install-progress;
+
+                states [
+                    visible when current-page == Page.Installing: {
+                        opacity: 1;
+                        in {
+                            animate opacity {
+                                duration: 300ms;
+                                easing: ease-in-out;
+                            }
+                        }
+                    }
+                ]
+            }
+
+            if current-page == Page.Complete: CompletePage {
+                success: install-success;
+                message: complete-message;
+                launch-clicked => {
+                    root.launch-app();
                 }
+                finish-clicked => {
+                    root.request-exit-app();
+                }
+
+                states [
+                    visible when current-page == Page.Complete: {
+                        opacity: 1;
+                        in {
+                            animate opacity {
+                                duration: 300ms;
+                                easing: ease-in-out;
+                            }
+                        }
+                    }
+                ]
             }
         }
     }
