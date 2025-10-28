@@ -2,6 +2,7 @@ use semver::Version;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use anyhow::{Context, Result};
+use tokio::sync::broadcast;
 
 #[cfg(target_os = "linux")]
 mod nix;
@@ -68,6 +69,28 @@ impl Architecture {
     /// Check if this is a Windows platform
     pub fn is_windows(&self) -> bool {
         matches!(self, Architecture::WindowsX64 | Architecture::WindowsArm64)
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[repr(u8)]
+pub enum State{
+    Downloading,
+    Extracting,
+    Installing,
+    Updating
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct StateProgress{
+    pub state: State,
+    /// The progress from 0.0 to 1.0
+    pub progress: f32,
+}
+
+impl StateProgress {
+    pub fn new(state: State, progress: f32) -> Self {
+        Self { state, progress: progress.clamp(0.0, 1.0) }
     }
 }
 
@@ -178,23 +201,27 @@ impl InstallationConfig {
     }
 }
 
+#[derive(Debug, Clone, Serialize)]
 /// Installation manager for handling application installations
-#[derive(Serialize, Deserialize)]
 pub struct InstallationManager {
     is_installed: bool,
     current_version: Option<Version>,
     latest_version: Option<Version>,
     config: InstallationConfig,
+    #[serde(skip)]
+    progress_tx: broadcast::Sender<StateProgress>,
 }
 
 impl InstallationManager {
     /// Create a new installation manager with configuration
     pub fn new(config: InstallationConfig) -> Self {
+        let (tx, _) = broadcast::channel(100);
         Self {
             is_installed: false,
             current_version: None,
             latest_version: None,
             config,
+            progress_tx: tx,
         }
     }
 
@@ -210,6 +237,16 @@ impl InstallationManager {
     /// Get a reference to the configuration
     pub fn config(&self) -> &InstallationConfig {
         &self.config
+    }
+
+    /// Subscribe to progress updates
+    pub fn subscribe(&self) -> broadcast::Receiver<StateProgress> {
+        self.progress_tx.subscribe()
+    }
+
+    /// Broadcast progress update (internal helper)
+    fn broadcast_progress(&self, state: State, progress: f32) {
+        let _ = self.progress_tx.send(StateProgress::new(state, progress));
     }
 
     /// Check if the application is currently installed
@@ -327,6 +364,8 @@ impl InstallationManager {
 
     /// Download a release asset
     pub fn download_asset(&self, asset: &GitHubAsset, dest_path: &PathBuf) -> Result<()> {
+        use std::io::Read;
+
         let client = reqwest::blocking::Client::builder()
             .user_agent("obsidian-installation-manager")
             .build()?;
@@ -340,17 +379,41 @@ impl InstallationManager {
             anyhow::bail!("Download failed with status: {}", response.status());
         }
 
+        let total_size = asset.size;
         let mut file = std::fs::File::create(dest_path)
             .context("Failed to create download file")?;
 
-        std::io::copy(&mut response, &mut file)
-            .context("Failed to write downloaded file")?;
+        let mut downloaded: u64 = 0;
+        let mut buffer = [0u8; 8192];
 
+        self.broadcast_progress(State::Downloading, 0.0);
+
+        loop {
+            let bytes_read = response.read(&mut buffer)
+                .context("Failed to read from download stream")?;
+
+            if bytes_read == 0 {
+                break;
+            }
+
+            std::io::Write::write_all(&mut file, &buffer[..bytes_read])
+                .context("Failed to write downloaded file")?;
+
+            downloaded += bytes_read as u64;
+
+            if total_size > 0 {
+                let progress = downloaded as f32 / total_size as f32;
+                self.broadcast_progress(State::Downloading, progress);
+            }
+        }
+
+        self.broadcast_progress(State::Downloading, 1.0);
         Ok(())
     }
 
     /// Extract downloaded archive
     pub fn extract_archive(&self, archive_path: &PathBuf, extract_to: &PathBuf) -> Result<()> {
+        self.broadcast_progress(State::Extracting, 0.0);
         std::fs::create_dir_all(extract_to)?;
 
         let file_name = archive_path
@@ -366,6 +429,7 @@ impl InstallationManager {
             anyhow::bail!("Unsupported archive format: {}", file_name);
         }
 
+        self.broadcast_progress(State::Extracting, 1.0);
         Ok(())
     }
 
@@ -429,6 +493,8 @@ impl InstallationManager {
         self.extract_archive(&download_path, &self.config.install_path)?;
 
         // Platform-specific installation
+        self.broadcast_progress(State::Installing, 0.0);
+
         #[cfg(target_os = "windows")]
         {
             win::install_service(&self.config, &release.tag_name)?;
@@ -438,6 +504,8 @@ impl InstallationManager {
         {
             nix::install_service(&self.config, &release.tag_name)?;
         }
+
+        self.broadcast_progress(State::Installing, 1.0);
 
         // Update internal state
         let version_str = release.tag_name.trim_start_matches('v');
@@ -469,6 +537,8 @@ impl InstallationManager {
             self.latest_version.as_ref().unwrap()
         );
 
+        self.broadcast_progress(State::Updating, 0.0);
+
         // Platform-specific service stop
         #[cfg(target_os = "windows")]
         {
@@ -480,8 +550,12 @@ impl InstallationManager {
             nix::stop_service(&self.config)?;
         }
 
+        self.broadcast_progress(State::Updating, 0.2);
+
         // Perform installation (which will overwrite existing files)
         self.install(include_prerelease)?;
+
+        self.broadcast_progress(State::Updating, 0.8);
 
         // Platform-specific service start
         #[cfg(target_os = "windows")]
@@ -493,6 +567,8 @@ impl InstallationManager {
         {
             nix::start_service(&self.config)?;
         }
+
+        self.broadcast_progress(State::Updating, 1.0);
 
         println!("Update complete!");
         Ok(())
