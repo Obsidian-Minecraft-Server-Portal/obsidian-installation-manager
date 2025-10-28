@@ -9,7 +9,7 @@ mod startup;
 mod window;
 
 use anyhow::Result;
-use installer::{perform_installation, InstallerState};
+use installer::{InstallerState, perform_installation};
 use log::info;
 use slint::ComponentHandle;
 use std::fs;
@@ -46,7 +46,7 @@ async fn main() -> Result<()> {
     }
 
     // Load Terms of Service
-    let tos_content = load_tos_content();
+    let tos_content = load_tos_content().await;
     ui.set_tos_content(tos_content.into());
 
     // Center the window on screen
@@ -155,9 +155,16 @@ async fn main() -> Result<()> {
 }
 
 /// Loads the Terms of Service content from embedded file
-fn load_tos_content() -> String {
-    // Embed the TOS file at compile time - 100% standalone
-    include_str!("../../terms-of-service.md").to_string()
+async fn load_tos_content() -> String {
+    let result = reqwest::get("https://raw.githubusercontent.com/Obsidian-Minecraft-Server-Portal/obsidian-server-panel/refs/heads/main/terms-of-service.md").await;
+
+    if let Ok(response) = result
+        && response.status().is_success()
+    {
+        response.text().await.unwrap_or_default()
+    } else {
+        "Failed to load the Terms of Service, Please visit our [github](https://github.com/Obsidian-Minecraft-Server-Portal/obsidian-server-panel.git) for the terms of service".to_string()
+    }
 }
 
 /// Launches the installed application
