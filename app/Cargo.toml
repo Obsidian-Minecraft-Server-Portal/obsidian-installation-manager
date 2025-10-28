@@ -1,0 +1,31 @@
+[package]
+name = "obsidian-installer"
+version = "0.1.0"
+edition = "2024"
+build = "build.rs"
+
+[dependencies]
+oim = { path = "../lib/" }
+pretty_env_logger = { version = "0.5.0" }
+log = "0.4.28"
+tokio = { version = "1.48.0" }
+slint = { version = "1.14.1", features = ["log", "serde"] }
+anyhow = { version = "1.0.100" }
+image = "0.25.8"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.62.2", features = ["Win32_UI_WindowsAndMessaging"] }
+
+[build-dependencies]
+slint-build = { version = "1.14.1" }
+
+[target.'cfg(target_os = "windows")'.build-dependencies]
+winresource = { version = "0.1.23" }
+
+
+[profile.release]
+opt-level = "z"     # Optimize for size
+lto = true          # Enable Link Time Optimization
+codegen-units = 1   # Better optimization (slower compile)
+strip = true        # Strip symbols from binary
+panic = "abort"     # Remove panic unwinding code

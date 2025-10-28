@@ -1,0 +1,168 @@
+import {
+    Button,
+    StandardButton,
+    VerticalBox,
+    Spinner,
+    GridBox,
+    HorizontalBox,
+    LineEdit,
+} from "std-widgets.slint";
+export component App inherits Window {
+    in property <image> app-icon;
+    no-frame: true;
+    resize-border-width: 5px;
+    title: "Installer - Obsidian Minecraft Server Panel";
+    width: 1280px;
+    background: #0b0b0e;
+    height: 720px;
+    icon: root.app-icon;
+
+    callback request_exit_app();
+    callback maximize_window(bool);
+    callback minimize_window();
+    callback toggle_maximize_window();
+    callback drag_window(length, length);
+    callback handle_resize(length, length);
+
+    // Draggable title bar area
+    Rectangle {
+        background: #141414;
+        width: 100%;
+        height: 40px;
+        y: 0;
+
+        TouchArea {
+            height: 100%;
+            width: 100%;
+            y: 0;
+            x: 0;
+
+            moved => {
+                drag_window(self.mouse-x - self.pressed-x, self.mouse-y - self.pressed-y)
+            }
+        }
+
+        HorizontalBox {
+            height: 100%;
+            Image {
+                width: 30px;
+                source: root.app-icon;
+            }
+
+            Text {
+                vertical-alignment: center;
+                text: root.title;
+                font-size: 1.1rem;
+            }
+        }
+    }
+
+    Rectangle {
+        background: exit-application-button-touch-area.has-hover ? #ff3333 : #111;
+        width: 40px;
+        height: 40px;
+        y: 0;
+        x: 1240px;
+        Text {
+            text: "X";
+            font-weight: 700;
+        }
+
+        exit-application-button-touch-area := TouchArea {
+            mouse-cursor: MouseCursor.pointer;
+            width: 100%;
+            height: 100%;
+            clicked => {
+                request_exit_app()
+            }
+        }
+    }
+
+    // Form
+    VerticalBox {
+        padding-top: 80px;
+        padding-left: 8rem;
+        padding-right: 8rem;
+        alignment: space-between;
+
+        VerticalBox {
+            Text {
+                text: "Installation Path";
+                horizontal-alignment: left;
+                font-size: 1.5rem;
+            }
+
+            HorizontalBox {
+                Rectangle {
+                    background: #141414;
+                    width: 100%;
+                    height: 40px;
+                    LineEdit {
+                        width: 100%;
+                        height: 100%;
+                        placeholder-text: "Installation Path";
+                    }
+                }
+
+                Rectangle {
+                    background: #141414;
+                    width: 40px;
+                    height: 40px;
+                    Image {
+                        height: 30px;
+                        width: 30px;
+                    }
+                }
+            }
+        }
+
+        // Navigation Buttons
+        HorizontalBox {
+            alignment: center;
+            close-button := Rectangle {
+                width: 120px;
+                height: 32px;
+                background: cancel-button-touch-area.has-hover ? #3a3d41 : #2a2d31;
+
+                cancel-button-touch-area := TouchArea {
+                    mouse-cursor: MouseCursor.pointer;
+                    width: 100%;
+                    height: 100%;
+                    clicked => {
+                        request_exit_app()
+                    }
+                }
+
+                Text {
+                    text: "Cancel";
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    color: white;
+                }
+            }
+
+            next-button := Rectangle {
+                width: 120px;
+                height: 32px;
+                background: next-button-touch-area.has-hover ? #2ce87c : #1bd96a;
+
+                next-button-touch-area := TouchArea {
+                    mouse-cursor: MouseCursor.pointer;
+                    width: 100%;
+                    height: 100%;
+                    clicked => {
+                        request_exit_app()
+                    }
+                }
+
+                Text {
+                    text: "Next";
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    color: black;
+                    font-weight: 700;
+                }
+            }
+        }
+    }
+}
