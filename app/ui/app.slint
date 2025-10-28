@@ -1,7 +1,7 @@
 import { VerticalBox } from "std-widgets.slint";
 import { Theme, TitleBar } from "common.slint";
 import { WelcomePage } from "welcome_page.slint";
-import { TermsPage } from "terms_page.slint";
+import { TermsPage, TextSegment } from "terms_page.slint";
 import { LocationPage } from "location_page.slint";
 import { InstallingPage } from "installing_page.slint";
 import { CompletePage } from "complete_page.slint";
@@ -35,7 +35,7 @@ export component App inherits Window {
     // Public properties
     in-out property <image> app-icon;
     in-out property <Page> current-page: Page.Welcome;
-    in-out property <string> tos-content;
+    in-out property <[TextSegment]> tos-segments;
     in-out property <bool> tos-accepted: false;
     in-out property <string> install-path: "C:\\Program Files\\Obsidian Minecraft Server Panel";
     in-out property <bool> install-as-service: true;
@@ -102,7 +102,7 @@ export component App inherits Window {
                 ]
             }
             if current-page == Page.TermsOfService: TermsPage {
-                tos-content: root.tos-content;
+                tos-segments: root.tos-segments;
                 accepted <=> tos-accepted;
                 back-clicked => {
                     current-page = Page.Welcome;

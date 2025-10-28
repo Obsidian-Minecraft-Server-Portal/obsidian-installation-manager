@@ -4,6 +4,7 @@ mod dialogs;
 mod fonts;
 mod handlers;
 mod installer;
+mod markdown;
 mod resources;
 mod startup;
 mod window;
@@ -45,9 +46,10 @@ async fn main() -> Result<()> {
         ui.set_app_icon(icon);
     }
 
-    // Load Terms of Service
-    let tos_content = load_tos_content().await;
-    ui.set_tos_content(tos_content.into());
+    // Load and parse Terms of Service markdown
+    let tos_segments = load_tos_content().await;
+    let tos_model = std::rc::Rc::new(slint::VecModel::from(tos_segments));
+    ui.set_tos_segments(tos_model.into());
 
     // Center the window on screen
     let window = ui.window();
@@ -154,17 +156,21 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-/// Loads the Terms of Service content from embedded file
-async fn load_tos_content() -> String {
+/// Loads the Terms of Service content from GitHub
+async fn load_tos_content() -> Vec<TextSegment> {
     let result = reqwest::get("https://raw.githubusercontent.com/Obsidian-Minecraft-Server-Portal/obsidian-server-panel/refs/heads/main/terms-of-service.md").await;
 
-    if let Ok(response) = result
+    let markdown = if let Ok(response) = result
         && response.status().is_success()
     {
-        response.text().await.unwrap_or_default()
+        let text = response.text().await.unwrap_or_default();
+        let lines: Vec<&str> = text.lines().collect();
+        lines[1..].join("\n")
     } else {
         "Failed to load the Terms of Service, Please visit our [github](https://github.com/Obsidian-Minecraft-Server-Portal/obsidian-server-panel.git) for the terms of service".to_string()
-    }
+    };
+
+    markdown::parse_markdown_to_segments(&markdown)
 }
 
 /// Launches the installed application

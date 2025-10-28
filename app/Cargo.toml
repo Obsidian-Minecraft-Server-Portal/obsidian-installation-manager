@@ -14,6 +14,7 @@ anyhow = { version = "1.0.100" }
 image = "0.25.8"
 ttf-parser = "0.25.1"
 reqwest = {version = "0.12.24", features = []}
+pulldown-cmark = "0.12.2"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.62.2", features = [

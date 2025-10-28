@@ -6,9 +6,22 @@ import {
 } from "std-widgets.slint";
 import { Theme, CustomButton } from "common.slint";
 
+// Styled text segment for markdown rendering
+export struct TextSegment {
+    text: string,
+    font-size: float,
+    font-weight: int,
+    color: brush,
+    is-italic: bool,
+    is-code: bool,
+    is-link: bool,
+    margin-top: float,
+    margin-bottom: float,
+}
+
 // Terms of Service page
 export component TermsPage inherits Rectangle {
-    in property <string> tos-content;
+    in property <[TextSegment]> tos-segments;
     in-out property <bool> accepted: false;
     callback back-clicked;
     callback next-clicked;
@@ -39,12 +52,26 @@ export component TermsPage inherits Rectangle {
 
             VerticalLayout {
                 padding: 20px;
+                spacing: 0px;
 
-                Text {
-                    text: tos-content;
-                    color: Theme.text-secondary;
-                    font-size: 13px;
-                    wrap: word-wrap;
+                for segment in tos-segments: Rectangle {
+                    height: self.preferred-height;
+                    background: transparent;
+
+                    VerticalLayout {
+                        padding-top: segment.margin-top * 1px;
+                        padding-bottom: segment.margin-bottom * 1px;
+
+                        Text {
+                            text: segment.text;
+                            color: segment.is-link ? Theme.accent : segment.color;
+                            font-size: segment.font-size * 1px;
+                            font-weight: segment.font-weight;
+                            font-italic: segment.is-italic;
+                            wrap: word-wrap;
+                            horizontal-alignment: left;
+                        }
+                    }
                 }
             }
         }
