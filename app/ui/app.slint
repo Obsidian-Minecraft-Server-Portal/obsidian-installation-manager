@@ -6,6 +6,10 @@ import { LocationPage } from "location_page.slint";
 import { InstallingPage } from "installing_page.slint";
 import { CompletePage } from "complete_page.slint";
 
+// Import Minecraft fonts
+import "../res/fonts/Minecraft-Seven_v2.ttf";
+import "../res/fonts/Minecraft-Tenv2.ttf";
+
 // Page enumeration
 export enum Page {
     Welcome,
@@ -53,6 +57,8 @@ export component App inherits Window {
         // Title bar
         TitleBar {
             app-icon: root.app-icon;
+            border-top-left-radius: 14px;
+            border-top-right-radius: 14px;
             minimize-clicked => {
                 root.minimize-window();
             }

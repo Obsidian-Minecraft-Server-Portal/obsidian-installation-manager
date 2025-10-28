@@ -11,26 +11,21 @@ fn get_font_family_name(font_data: &[u8]) -> Option<String> {
 
     // Try to get the font family name (name ID 1)
     for name in face.names() {
-        if name.name_id == name_id::FAMILY {
-            if let Some(family_name) = name.to_string() {
+        if name.name_id == name_id::FAMILY && let Some(family_name) = name.to_string() {
                 return Some(family_name);
-            }
         }
     }
     None
 }
 
-/// Loads and registers embedded fonts with the system
+/// Loads and registers embedded fonts
 ///
-/// On Windows, this uses AddFontMemResourceEx to register fonts for this process only.
-/// The fonts are automatically unregistered when the application exits.
-#[cfg(target_os = "windows")]
+/// Fonts are imported directly in the .slint file, so this function just logs
+/// the detected font family names for debugging purposes.
 pub fn load_embedded_fonts() -> Result<(), Box<dyn std::error::Error>> {
-    use windows::Win32::Graphics::Gdi::AddFontMemResourceEx;
+    info!("Minecraft fonts are imported in UI definition (app.slint)");
 
-    info!("Loading embedded Minecraft fonts (TTF format)...");
-
-    // Extract and log the actual font family names
+    // Extract and log the actual font family names for debugging
     if let Some(body_font_name) = get_font_family_name(MINECRAFT_BODY_FONT) {
         info!("Body font family name: '{}'", body_font_name);
     } else {
@@ -43,53 +38,9 @@ pub fn load_embedded_fonts() -> Result<(), Box<dyn std::error::Error>> {
         warn!("Could not extract header font family name");
     }
 
-    unsafe {
-        let mut num_fonts: u32 = 0;
-
-        // Try to register body font (Minecraft-Seven)
-        let body_font_handle = AddFontMemResourceEx(
-            MINECRAFT_BODY_FONT.as_ptr() as *const _,
-            MINECRAFT_BODY_FONT.len() as u32,
-            None,
-            &mut num_fonts,
-        );
-
-        if body_font_handle.is_invalid() {
-            warn!("Failed to register Minecraft body font - may need TTF format");
-        } else {
-            info!("Successfully registered Minecraft body font ({} fonts registered)", num_fonts);
-        }
-
-        // Try to register header font (Minecraft-Ten)
-        let header_font_handle = AddFontMemResourceEx(
-            MINECRAFT_HEADER_FONT.as_ptr() as *const _,
-            MINECRAFT_HEADER_FONT.len() as u32,
-            None,
-            &mut num_fonts,
-        );
-
-        if header_font_handle.is_invalid() {
-            warn!("Failed to register Minecraft header font - may need TTF format");
-        } else {
-            info!("Successfully registered Minecraft header font ({} fonts registered)", num_fonts);
-        }
-
-        // Note: Fonts are automatically unregistered when the process exits
-        // We don't explicitly call RemoveFontMemResourceEx here
-    }
-
     Ok(())
 }
 
-/// Loads embedded fonts (non-Windows fallback)
-///
-/// On non-Windows platforms, this is a no-op as font registration
-/// mechanisms vary by platform. System fonts will be used as fallback.
-#[cfg(not(target_os = "windows"))]
-pub fn load_embedded_fonts() -> Result<(), Box<dyn std::error::Error>> {
-    info!("Font loading not implemented for this platform - using system fonts");
-    Ok(())
-}
 
 /// Returns the font family names to use in the UI
 ///
