@@ -28,9 +28,13 @@ pub struct CliArgs {
     #[arg(long)]
     pub accept_tos: bool,
 
-    /// Initial page to display: 0=Welcome, 1=TermsOfService, 2=Location, 3=Installing, 4=Complete
+    /// Initial page to display: 0=Welcome, 1=ExistingInstallation, 2=TermsOfService, 3=Location, 4=Installing, 5=Complete
     #[arg(long, value_name = "PAGE")]
     pub page: Option<i32>,
+
+    /// Uninstall mode (used internally when relaunching for uninstall)
+    #[arg(long)]
+    pub uninstall: bool,
 }
 
 impl CliArgs {
@@ -75,6 +79,10 @@ impl CliArgs {
 
         if let Some(page) = self.page {
             args.push(format!("--page {}", page));
+        }
+
+        if self.uninstall {
+            args.push("--uninstall".to_string());
         }
 
         args.join(" ")

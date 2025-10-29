@@ -245,6 +245,35 @@ impl InstallationConfig {
     }
 }
 
+/// Check if an installation exists by querying the system (Windows registry or Linux version file)
+#[cfg(target_os = "windows")]
+pub fn check_installation_exists(config: &InstallationConfig) -> Result<Option<(Version, PathBuf)>> {
+    let version = win::get_installed_version(config)?;
+    let path = win::get_install_path(config)?;
+
+    match (version, path) {
+        (Some(v), Some(p)) => Ok(Some((v, p))),
+        _ => Ok(None),
+    }
+}
+
+/// Check if an installation exists by querying the system (Windows registry or Linux version file)
+#[cfg(target_os = "linux")]
+pub fn check_installation_exists(config: &InstallationConfig) -> Result<Option<(Version, PathBuf)>> {
+    let version = nix::get_installed_version(config)?;
+
+    match version {
+        Some(v) => Ok(Some((v, config.install_path.clone()))),
+        None => Ok(None),
+    }
+}
+
+/// Check if an installation exists (stub for unsupported platforms)
+#[cfg(not(any(target_os = "windows", target_os = "linux")))]
+pub fn check_installation_exists(_config: &InstallationConfig) -> Result<Option<(Version, PathBuf)>> {
+    Ok(None)
+}
+
 #[derive(Debug, Clone, Serialize)]
 /// Installation manager for handling application installations
 pub struct InstallationManager {
@@ -938,8 +967,16 @@ impl InstallationManager {
 
     /// Uninstall the application
     pub async fn uninstall(&mut self) -> Result<()> {
-        if !self.is_installed {
-            anyhow::bail!("No installation found.");
+        // Check registry/filesystem directly instead of relying on self.is_installed
+        // since the manager may have been newly created
+        #[cfg(target_os = "windows")]
+        let has_installation = win::get_installed_version(&self.config)?.is_some();
+
+        #[cfg(target_os = "linux")]
+        let has_installation = nix::get_installed_version(&self.config)?.is_some();
+
+        if !has_installation {
+            anyhow::bail!("No installation found in registry.");
         }
 
         println!("Uninstalling {}...", self.config.service_name);

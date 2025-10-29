@@ -133,9 +133,9 @@ pub struct ExistingInstallation {
     pub install_path: PathBuf,
 }
 
-/// Check if the application is already installed
+/// Check if the application is already installed by querying the registry/system
 pub fn check_existing_installation() -> Option<ExistingInstallation> {
-    // Create a temporary config to check installation status
+    // Create a temporary config with default path (actual path will come from registry)
     let config = InstallationConfig::new(
         PathBuf::from("C:\\Program Files\\Obsidian Minecraft Server Panel"),
         GITHUB_REPO.to_string(),
@@ -143,18 +143,24 @@ pub fn check_existing_installation() -> Option<ExistingInstallation> {
     )
     .registry_path(REGISTRY_PATH.to_string());
 
-    let manager = InstallationManager::new(config);
-
-    if manager.is_installed() {
-        if let (Some(version), Some(install_path)) = (manager.current_version(), manager.get_install_path()) {
-            return Some(ExistingInstallation {
+    // Check if installation exists using the library function
+    match oim::check_installation_exists(&config) {
+        Ok(Some((version, install_path))) => {
+            info!("Found existing installation: version {}, path {}", version, install_path.display());
+            Some(ExistingInstallation {
                 version: version.to_string(),
                 install_path,
-            });
+            })
+        }
+        Ok(None) => {
+            info!("No existing installation found");
+            None
+        }
+        Err(e) => {
+            error!("Error checking for existing installation: {}", e);
+            None
         }
     }
-
-    None
 }
 
 /// Performs a repair operation (reinstall files without deleting existing ones)
@@ -239,9 +245,15 @@ pub async fn perform_repair(
 pub async fn perform_uninstall(state: Arc<Mutex<InstallerState>>) -> Result<()> {
     info!("Starting uninstall");
 
-    // Create a temporary config to access the installation
+    // First check if there's an existing installation and get its path from registry
+    let existing = check_existing_installation()
+        .ok_or_else(|| anyhow::anyhow!("No installation found in registry"))?;
+
+    info!("Uninstalling from path: {}", existing.install_path.display());
+
+    // Create config with the actual installation path from registry
     let config = InstallationConfig::new(
-        PathBuf::from("C:\\Program Files\\Obsidian Minecraft Server Panel"),
+        existing.install_path,
         GITHUB_REPO.to_string(),
         SERVICE_NAME.to_string(),
     )

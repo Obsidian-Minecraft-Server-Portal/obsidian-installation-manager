@@ -150,7 +150,7 @@ async fn run_gui(args: CliArgs) -> Result<()> {
             _ => Page::Welcome,
         };
         ui.set_current_page(target_page);
-        page == 4 // Start installation if we're on the Installing page
+        page == 4 && !args.uninstall // Start installation if we're on the Installing page and not uninstalling
     } else if args.has_install_params() {
         // If CLI args were provided but no page, skip to location page
         info!("CLI arguments detected, navigating to installation page");
@@ -271,6 +271,7 @@ async fn run_gui(args: CliArgs) -> Result<()> {
                     headless: false, // Don't use headless when relaunching from GUI
                     accept_tos: true, // TOS already accepted in UI
                     page: Some(4), // Go directly to Installing page
+                    uninstall: false,
                 };
                 
                 debug!("Elevation args: {:?}", elevation_args);
@@ -410,6 +411,49 @@ async fn run_gui(args: CliArgs) -> Result<()> {
         if let Some(ui) = ui_handle_repair.upgrade() {
             info!("Repair installation requested");
 
+            // Check if we need admin privileges
+            if !elevation::is_elevated() {
+                warn!("Application is not running with administrator privileges");
+
+                // Build CLI args to pass to elevated instance
+                let elevation_args = CliArgs {
+                    install_path: Some(ui.get_existing_install_path().to_string()),
+                    channel: ui.get_release_channel(),
+                    service: ui.get_install_as_service(),
+                    autostart: ui.get_start_with_windows(),
+                    headless: false,
+                    accept_tos: true,
+                    page: Some(4), // Go directly to Installing page
+                    uninstall: false,
+                };
+
+                debug!("Requesting elevation for repair: {:?}", elevation_args);
+
+                // Request elevation with args
+                match elevation::request_elevation_with_args(&elevation_args) {
+                    Ok(_) => {
+                        // Successfully requested elevation, this process will exit
+                        info!("Elevation requested successfully for repair");
+                    }
+                    Err(e) => {
+                        error!("Failed to request elevation: {}", e);
+                        // Show error to user
+                        ui.set_current_page(Page::Complete);
+                        ui.set_install_success(false);
+                        ui.set_complete_message(
+                            format!(
+                                "Administrator privileges are required to repair the installation.\\n\\nError: {}",
+                                e
+                            )
+                            .into(),
+                        );
+                    }
+                }
+                return;
+            }
+
+            info!("Running with administrator privileges, proceeding with repair");
+
             // Navigate to Installing page
             ui.set_current_page(Page::Installing);
 
@@ -496,6 +540,49 @@ async fn run_gui(args: CliArgs) -> Result<()> {
         if let Some(ui) = ui_handle_uninstall.upgrade() {
             info!("Uninstall requested");
 
+            // Check if we need admin privileges
+            if !elevation::is_elevated() {
+                warn!("Application is not running with administrator privileges");
+
+                // Build CLI args to pass to elevated instance
+                let elevation_args = CliArgs {
+                    install_path: Some(ui.get_existing_install_path().to_string()),
+                    channel: ui.get_release_channel(),
+                    service: ui.get_install_as_service(),
+                    autostart: ui.get_start_with_windows(),
+                    headless: false,
+                    accept_tos: true,
+                    page: Some(4), // Go directly to Installing page
+                    uninstall: true, // Flag to indicate uninstall mode
+                };
+
+                debug!("Requesting elevation for uninstall: {:?}", elevation_args);
+
+                // Request elevation with args
+                match elevation::request_elevation_with_args(&elevation_args) {
+                    Ok(_) => {
+                        // Successfully requested elevation, this process will exit
+                        info!("Elevation requested successfully for uninstall");
+                    }
+                    Err(e) => {
+                        error!("Failed to request elevation: {}", e);
+                        // Show error to user
+                        ui.set_current_page(Page::Complete);
+                        ui.set_install_success(false);
+                        ui.set_complete_message(
+                            format!(
+                                "Administrator privileges are required to uninstall.\\n\\nError: {}",
+                                e
+                            )
+                            .into(),
+                        );
+                    }
+                }
+                return;
+            }
+
+            info!("Running with administrator privileges, proceeding with uninstall");
+
             // Navigate to Installing page
             ui.set_current_page(Page::Installing);
 
@@ -519,19 +606,26 @@ async fn run_gui(args: CliArgs) -> Result<()> {
                 // Wait a moment for final state update
                 tokio::time::sleep(Duration::from_millis(500)).await;
 
-                // Update UI to complete page on event loop thread
+                // Check if uninstall was successful
                 let (success, message) = {
                     let s = state_clone.lock().unwrap();
                     (s.success, s.message.clone())
                 };
 
-                let _ = slint::invoke_from_event_loop(move || {
-                    if let Some(ui) = ui_weak.upgrade() {
-                        ui.set_install_success(success);
-                        ui.set_complete_message(message.into());
-                        ui.set_current_page(Page::Complete);
-                    }
-                });
+                if success {
+                    // For successful uninstall, just exit the application
+                    info!("Uninstall completed successfully, exiting application");
+                    std::process::exit(0);
+                } else {
+                    // For failed uninstall, show error on complete page
+                    let _ = slint::invoke_from_event_loop(move || {
+                        if let Some(ui) = ui_weak.upgrade() {
+                            ui.set_install_success(false);
+                            ui.set_complete_message(message.into());
+                            ui.set_current_page(Page::Complete);
+                        }
+                    });
+                }
             });
 
             // Start progress monitoring
@@ -589,6 +683,12 @@ async fn run_gui(args: CliArgs) -> Result<()> {
         ui.invoke_start_installation();
     }
 
+    // If uninstall flag is set, trigger uninstall
+    if args.uninstall {
+        info!("Auto-starting uninstall from elevated instance");
+        ui.invoke_uninstall_installation();
+    }
+
     // Run the application
     ui.run()?;
     Ok(())
@@ -625,7 +725,7 @@ fn launch_application(install_path: &str) {
                 #[cfg(target_os = "windows")]
                 {
                     use std::process::Command;
-                    match Command::new(&path).spawn() {
+                    match Command::new("explorer.exe").args(&path).spawn() {
                         Ok(_) => {
                             info!("Application launched successfully, exiting installer");
                             std::process::exit(0);
