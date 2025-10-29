@@ -24,7 +24,7 @@ pub fn get_installed_version(config: &InstallationConfig) -> Result<Option<Versi
 }
 
 /// Store version information
-fn set_installed_version(config: &InstallationConfig, version: &str) -> Result<()> {
+pub fn set_installed_version(config: &InstallationConfig, version: &str) -> Result<()> {
     let version_dir = PathBuf::from(config.get_version_file_dir());
     std::fs::create_dir_all(&version_dir)
         .context("Failed to create version directory")?;

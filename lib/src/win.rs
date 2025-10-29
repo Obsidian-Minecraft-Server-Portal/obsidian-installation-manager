@@ -31,7 +31,7 @@ pub fn get_installed_version(config: &InstallationConfig) -> Result<Option<Versi
 }
 
 /// Store version information in Windows registry
-fn set_installed_version(config: &InstallationConfig, version: &str) -> Result<()> {
+pub fn set_installed_version(config: &InstallationConfig, version: &str) -> Result<()> {
     let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
     let registry_path = config.get_registry_path();
     let (key, _) = hklm.create_subkey(registry_path)
@@ -57,6 +57,23 @@ fn set_install_path(config: &InstallationConfig, path: &std::path::Path) -> Resu
         .context("Failed to set install path in registry")?;
 
     Ok(())
+}
+
+/// Get the install path from Windows registry
+pub fn get_install_path(config: &InstallationConfig) -> Result<Option<PathBuf>> {
+    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+    let registry_path = config.get_registry_path();
+
+    match hklm.open_subkey(registry_path) {
+        Ok(key) => {
+            let path_key = format!("{}_path", config.service_name);
+            match key.get_value::<String, _>(&path_key) {
+                Ok(path_str) => Ok(Some(PathBuf::from(path_str))),
+                Err(_) => Ok(None),
+            }
+        }
+        Err(_) => Ok(None),
+    }
 }
 
 /// Remove registry entries for a service
@@ -174,6 +191,30 @@ pub fn install_service(
 
     // Start the service
     start_service(config)?;
+
+    Ok(())
+}
+
+/// Set directory permissions to allow the application to write
+pub fn set_directory_permissions(install_path: &PathBuf) -> Result<()> {
+    use std::process::Command;
+
+    // Use icacls to grant full control to Users group
+    // This ensures the installed application can write to its own directory
+    let path_str = install_path.to_string_lossy();
+
+    let output = Command::new("icacls")
+        .arg(&*path_str)
+        .arg("/grant")
+        .arg("Users:(OI)(CI)F")  // Grant full control, inherit to objects and containers
+        .arg("/T")  // Apply recursively
+        .output()
+        .context("Failed to execute icacls command")?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!("Failed to set directory permissions: {}", stderr);
+    }
 
     Ok(())
 }

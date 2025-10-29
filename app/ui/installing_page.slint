@@ -1,10 +1,12 @@
-import { VerticalBox } from "std-widgets.slint";
+import { VerticalBox, HorizontalBox } from "std-widgets.slint";
 import { Theme } from "common.slint";
 
 // Installing page
 export component InstallingPage inherits Rectangle {
     in property <string> status-text: "Preparing installation...";
     in property <float> progress: 0.0;
+    in property <bool> has-error: false;
+    in property <string> error-message: "";
 
     background: Theme.bg-primary;
     width: 1280px;
@@ -119,6 +121,47 @@ export component InstallingPage inherits Rectangle {
                 font-size: 18px;
                 font-weight: 600;
                 horizontal-alignment: center;
+            }
+        }
+
+        // Error display section
+        if has-error: Rectangle {
+            background: Theme.error;
+            border-radius: 0px;
+
+            VerticalLayout {
+                padding: 20px;
+                spacing: 10px;
+                alignment: start;
+
+                HorizontalLayout {
+                    spacing: 12px;
+                    alignment: start;
+
+                    Text {
+                        text: "✕";
+                        color: #ffffff;
+                        font-size: 24px;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                    }
+
+                    Text {
+                        text: "Installation Error";
+                        color: #ffffff;
+                        font-size: 18px;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Text {
+                    text: error-message;
+                    color: #ffffff;
+                    font-size: 13px;
+                    wrap: word-wrap;
+                    horizontal-alignment: left;
+                }
             }
         }
     }

@@ -9,10 +9,11 @@
 /// Note: This example won't actually install anything without proper permissions
 /// and a valid GitHub repository with releases.
 
-use oim::{InstallationManager, InstallationConfig, Architecture};
+use oim::{InstallationManager, InstallationConfig, Architecture, ReleaseChannel};
 use std::path::PathBuf;
 
-fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     println!("Full Workflow Example");
     println!("=====================\n");
 
@@ -35,7 +36,7 @@ fn main() -> anyhow::Result<()> {
 
     println!("Step 1: Fetch available releases from GitHub");
     println!("----------------------------------------------");
-    match manager.fetch_releases() {
+    match manager.fetch_releases().await {
         Ok(releases) => {
             println!("Found {} releases", releases.len());
             if let Some(latest) = releases.first() {
@@ -75,7 +76,7 @@ fn main() -> anyhow::Result<()> {
     println!("-------------------------");
     println!("(Skipped in example - requires actual installation)");
     // Uncomment to actually check:
-    // match manager.check_for_updates(false) {
+    // match manager.check_for_updates(ReleaseChannel::Release) {
     //     Ok(has_update) => {
     //         if has_update {
     //             println!("Update available!");
@@ -92,11 +93,13 @@ fn main() -> anyhow::Result<()> {
     println!("\nStep 4: Installation workflow");
     println!("-----------------------------");
     println!("To install (requires elevated privileges):");
-    println!("  manager.install(false)?;");
+    println!("  manager.install(ReleaseChannel::Release)?;  // Stable only");
+    println!("  manager.install(ReleaseChannel::Beta)?;     // Beta/RC");
+    println!("  manager.install(ReleaseChannel::Alpha)?;    // All pre-releases");
     println!();
     println!("To update an existing installation:");
-    println!("  if manager.check_for_updates(false)? {{");
-    println!("      manager.update(false)?;");
+    println!("  if manager.check_for_updates(ReleaseChannel::Release)? {{");
+    println!("      manager.update(ReleaseChannel::Release)?;");
     println!("  }}");
     println!();
     println!("To uninstall:");

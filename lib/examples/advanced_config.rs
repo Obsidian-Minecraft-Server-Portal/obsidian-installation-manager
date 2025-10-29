@@ -6,7 +6,8 @@
 use oim::{InstallationManager, InstallationConfig};
 use std::path::PathBuf;
 
-fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     println!("Advanced Configuration Example");
     println!("==============================\n");
 

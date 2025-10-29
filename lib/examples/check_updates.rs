@@ -3,10 +3,11 @@
 /// This example demonstrates how to check if updates are available
 /// for an installed application.
 
-use oim::{InstallationManager, InstallationConfig};
+use oim::{InstallationManager, InstallationConfig, ReleaseChannel};
 use std::path::PathBuf;
 
-fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     println!("Update Checker Example");
     println!("======================\n");
 
@@ -19,10 +20,10 @@ fn main() -> anyhow::Result<()> {
 
     let mut manager = InstallationManager::new(config);
 
-    println!("Checking for updates...\n");
+    println!("Checking for updates on Release channel...\n");
 
-    // Check for updates
-    match manager.check_for_updates(false) {
+    // Check for updates on the Release channel (stable only)
+    match manager.check_for_updates(ReleaseChannel::Release).await {
         Ok(has_update) => {
             if has_update {
                 println!("✓ Update available!");
@@ -38,7 +39,7 @@ fn main() -> anyhow::Result<()> {
 
                 println!();
                 println!("To install the update, run:");
-                println!("  manager.update(false)?;");
+                println!("  manager.update(ReleaseChannel::Release)?;");
             } else {
                 println!("✓ Already up to date!");
 
@@ -58,8 +59,9 @@ fn main() -> anyhow::Result<()> {
         }
     }
 
-    println!("\nInclude pre-releases:");
-    println!("  manager.check_for_updates(true)?;");
+    println!("\nTo check other channels:");
+    println!("  manager.check_for_updates(ReleaseChannel::Beta)?;   // Include beta/RC");
+    println!("  manager.check_for_updates(ReleaseChannel::Alpha)?;  // Include all pre-releases");
 
     Ok(())
 }

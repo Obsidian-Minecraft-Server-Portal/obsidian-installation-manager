@@ -3,10 +3,11 @@
 /// This example shows how to use the installation manager with default settings
 /// to install an application from a GitHub repository.
 
-use oim::{InstallationManager, InstallationConfig};
+use oim::{InstallationManager, InstallationConfig, ReleaseChannel};
 use std::path::PathBuf;
 
-fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     println!("Basic Installation Manager Example");
     println!("===================================\n");
 
@@ -38,11 +39,13 @@ fn main() -> anyhow::Result<()> {
     }
 
     println!("\nTo install:");
-    println!("  manager.install(false)?;  // false = exclude pre-releases");
+    println!("  manager.install(ReleaseChannel::Release)?;  // Install stable releases only");
+    println!("  manager.install(ReleaseChannel::Beta)?;     // Install beta/RC releases");
+    println!("  manager.install(ReleaseChannel::Alpha)?;    // Install all pre-releases");
 
     println!("\nTo check for updates:");
-    println!("  if manager.check_for_updates(false)? {{");
-    println!("      manager.update(false)?;");
+    println!("  if manager.check_for_updates(ReleaseChannel::Release)? {{");
+    println!("      manager.update(ReleaseChannel::Release)?;");
     println!("  }}");
 
     println!("\nTo uninstall:");

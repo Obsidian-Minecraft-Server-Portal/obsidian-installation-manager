@@ -26,6 +26,50 @@ pub struct GitHubAsset {
     pub size: u64,
 }
 
+/// Release channel for version filtering
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ReleaseChannel {
+    /// Stable releases only (no pre-release identifier)
+    Release,
+    /// Beta and RC releases (pre-release contains "beta" or "rc")
+    Beta,
+    /// Alpha and other pre-releases (all pre-release versions)
+    Alpha,
+}
+
+impl ReleaseChannel {
+    /// Check if a version matches this channel based on semver pre-release identifier
+    pub fn matches_version(&self, version: &Version) -> bool {
+        match self {
+            ReleaseChannel::Release => {
+                // Only stable releases (no pre-release)
+                version.pre.is_empty()
+            }
+            ReleaseChannel::Beta => {
+                // Beta, RC, or stable releases
+                if version.pre.is_empty() {
+                    return true;
+                }
+                let pre_str = version.pre.to_string().to_lowercase();
+                pre_str.contains("beta") || pre_str.contains("rc")
+            }
+            ReleaseChannel::Alpha => {
+                // All versions including alpha, beta, rc, and stable
+                true
+            }
+        }
+    }
+
+    /// Get display name for the channel
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            ReleaseChannel::Release => "Release (Stable)",
+            ReleaseChannel::Beta => "Beta",
+            ReleaseChannel::Alpha => "Alpha (All Pre-releases)",
+        }
+    }
+}
+
 /// Platform architecture information
 #[derive(Debug, Clone, PartialEq)]
 pub enum Architecture {
@@ -264,54 +308,222 @@ impl InstallationManager {
         self.latest_version.as_ref()
     }
 
+    /// Get the install path from registry (Windows) or config file (Linux)
+    pub fn get_install_path(&self) -> Option<PathBuf> {
+        #[cfg(target_os = "windows")]
+        {
+            win::get_install_path(&self.config).ok().flatten()
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            // For Linux, return the configured install path if installed
+            if self.is_installed {
+                Some(self.config.install_path.clone())
+            } else {
+                None
+            }
+        }
+
+        #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+        {
+            None
+        }
+    }
+
     /// Fetch releases from GitHub
-    pub fn fetch_releases(&self) -> Result<Vec<GitHubRelease>> {
+    pub async fn fetch_releases(&self) -> Result<Vec<GitHubRelease>> {
         let url = format!(
             "https://api.github.com/repos/{}/releases",
             self.config.github_repo
         );
 
-        let client = reqwest::blocking::Client::builder()
+        let client = reqwest::Client::builder()
             .user_agent("obsidian-installation-manager")
-            .build()?;
+            .build()
+            .context("Failed to create HTTP client")?;
 
         let response = client
             .get(&url)
             .send()
-            .context("Failed to fetch releases from GitHub")?;
+            .await
+            .context(format!(
+                "Failed to connect to GitHub API. Please check your internet connection and try again. URL: {}",
+                url
+            ))?;
 
-        if !response.status().is_success() {
-            anyhow::bail!("GitHub API returned status: {}", response.status());
+        let status = response.status();
+        if !status.is_success() {
+            let error_body = response.text().await.unwrap_or_default();
+
+            let error_message = match status.as_u16() {
+                404 => format!(
+                    "Repository '{}' not found. Please verify the repository name is correct.",
+                    self.config.github_repo
+                ),
+                403 => format!(
+                    "GitHub API rate limit exceeded or access denied. Please try again later. Details: {}",
+                    error_body
+                ),
+                401 => "GitHub API authentication failed. The repository may be private.".to_string(),
+                _ => format!(
+                    "GitHub API error (status {}): {}",
+                    status,
+                    if error_body.is_empty() { "No additional details" } else { &error_body }
+                ),
+            };
+
+            anyhow::bail!(error_message);
         }
 
         let releases: Vec<GitHubRelease> = response
             .json()
-            .context("Failed to parse GitHub releases")?;
+            .await
+            .context("Failed to parse GitHub API response. The API response format may have changed.")?;
 
         Ok(releases)
     }
 
-    /// Get the latest release (excluding pre-releases by default)
-    pub fn get_latest_release(&mut self, include_prerelease: bool) -> Result<GitHubRelease> {
-        let releases = self.fetch_releases()?;
+    /// Get the latest version for each channel without fetching releases multiple times
+    pub async fn get_channel_versions(&mut self) -> Result<(Option<Version>, Option<Version>, Option<Version>)> {
+        let releases = self.fetch_releases().await?;
 
-        let latest = releases
-            .into_iter()
-            .find(|r| include_prerelease || !r.prerelease)
-            .context("No releases found")?;
+        println!("Found {} releases from GitHub", releases.len());
 
-        // Update latest version
-        let version_str = latest.tag_name.trim_start_matches('v');
-        self.latest_version = Some(Version::parse(version_str)?);
+        if releases.is_empty() {
+            return Ok((None, None, None));
+        }
 
-        Ok(latest)
+        let mut release_version: Option<Version> = None;
+        let mut beta_version: Option<Version> = None;
+        let mut alpha_version: Option<Version> = None;
+
+        // Parse all releases and categorize them
+        for release in &releases {
+            let version_str = release.tag_name.trim_start_matches('v');
+            println!("Parsing release: {} (prerelease: {})", release.tag_name, release.prerelease);
+
+            match Version::parse(version_str) {
+                Ok(version) => {
+                    println!("  Parsed as semver: {} (pre: {:?})", version, version.pre);
+
+                    // If GitHub marks this as a prerelease, it should NOT match Release channel
+                    // Check for Release channel (stable only - no pre-release in semver AND not marked as prerelease by GitHub)
+                    if release_version.is_none() && !release.prerelease && ReleaseChannel::Release.matches_version(&version) {
+                        println!("  -> Matches Release channel");
+                        release_version = Some(version.clone());
+                    }
+
+                    // Check for Beta channel (beta/rc releases OR stable releases)
+                    // If GitHub marks it as prerelease, check if it's beta/rc, otherwise only stable
+                    if beta_version.is_none() {
+                        let matches = if release.prerelease {
+                            // For GitHub prereleases, only match if it's actually beta/rc in semver
+                            let pre_str = version.pre.to_string().to_lowercase();
+                            pre_str.contains("beta") || pre_str.contains("rc")
+                        } else {
+                            // Stable releases always match beta channel
+                            ReleaseChannel::Beta.matches_version(&version)
+                        };
+
+                        if matches {
+                            println!("  -> Matches Beta channel");
+                            beta_version = Some(version.clone());
+                        }
+                    }
+
+                    // Check for Alpha channel (all versions)
+                    if alpha_version.is_none() && ReleaseChannel::Alpha.matches_version(&version) {
+                        println!("  -> Matches Alpha channel");
+                        alpha_version = Some(version.clone());
+                    }
+
+                    // Early exit if we found all three
+                    if release_version.is_some() && beta_version.is_some() && alpha_version.is_some() {
+                        break;
+                    }
+                }
+                Err(e) => {
+                    println!("  Failed to parse as semver: {}", e);
+                }
+            }
+        }
+
+        println!("Final versions - Release: {:?}, Beta: {:?}, Alpha: {:?}",
+                 release_version, beta_version, alpha_version);
+
+        Ok((release_version, beta_version, alpha_version))
     }
 
-    /// Check for updates
-    pub fn check_for_updates(&mut self, include_prerelease: bool) -> Result<bool> {
-        let latest = self.get_latest_release(include_prerelease)?;
-        let latest_version_str = latest.tag_name.trim_start_matches('v');
-        let latest_version = Version::parse(latest_version_str)?;
+    /// Get the latest release for the specified channel
+    pub async fn get_latest_release(&mut self, channel: ReleaseChannel) -> Result<GitHubRelease> {
+        let releases = self.fetch_releases().await?;
+
+        if releases.is_empty() {
+            anyhow::bail!(
+                "No releases found for repository '{}'. Please ensure the repository has published releases.",
+                self.config.github_repo
+            );
+        }
+
+        let total_releases = releases.len();
+
+        // Find the first release that matches the channel
+        let mut matching_release = None;
+        for release in releases {
+            let version_str = release.tag_name.trim_start_matches('v');
+
+            // Try to parse the version
+            if let Ok(version) = Version::parse(version_str) {
+                // Check if this version matches the requested channel
+                let matches = match channel {
+                    ReleaseChannel::Release => {
+                        // Must not be marked as prerelease by GitHub AND have no semver pre-release
+                        !release.prerelease && version.pre.is_empty()
+                    }
+                    ReleaseChannel::Beta => {
+                        if release.prerelease {
+                            // For GitHub prereleases, must be beta or rc
+                            let pre_str = version.pre.to_string().to_lowercase();
+                            pre_str.contains("beta") || pre_str.contains("rc")
+                        } else {
+                            // Stable releases match beta channel
+                            true
+                        }
+                    }
+                    ReleaseChannel::Alpha => {
+                        // All versions match alpha channel
+                        true
+                    }
+                };
+
+                if matches {
+                    matching_release = Some((release, version));
+                    break;
+                }
+            }
+        }
+
+        match matching_release {
+            Some((release, version)) => {
+                self.latest_version = Some(version);
+                Ok(release)
+            }
+            None => {
+                let channel_name = channel.display_name();
+                anyhow::bail!(
+                    "No releases found in the '{}' channel for repository '{}'. Total releases available: {}. Try selecting a different channel.",
+                    channel_name,
+                    self.config.github_repo,
+                    total_releases
+                )
+            }
+        }
+    }
+
+    /// Check for updates on the specified channel
+    pub async fn check_for_updates(&mut self, channel: ReleaseChannel) -> Result<bool> {
+        let _latest = self.get_latest_release(channel).await?;
 
         #[cfg(target_os = "windows")]
         {
@@ -326,7 +538,7 @@ impl InstallationManager {
         self.is_installed = self.current_version.is_some();
 
         Ok(match &self.current_version {
-            Some(current) => latest_version > *current,
+            Some(current) => self.latest_version.as_ref().map_or(false, |latest| latest > current),
             None => true, // No version installed, update available
         })
     }
@@ -335,6 +547,13 @@ impl InstallationManager {
     pub fn select_asset(&self, release: &GitHubRelease) -> Result<GitHubAsset> {
         let arch = Architecture::detect()?;
         let patterns = arch.asset_patterns();
+
+        if release.assets.is_empty() {
+            anyhow::bail!(
+                "Release '{}' has no downloadable assets. The release may not be properly configured.",
+                release.tag_name
+            );
+        }
 
         // Try to find an asset that matches the architecture patterns
         for asset in &release.assets {
@@ -359,47 +578,72 @@ impl InstallationManager {
             }
         }
 
-        anyhow::bail!("No suitable asset found for architecture: {:?}", arch)
+        let available_assets: Vec<String> = release.assets.iter()
+            .map(|a| a.name.clone())
+            .collect();
+
+        anyhow::bail!(
+            "No compatible asset found for your platform ({:?}). Expected patterns: {:?}. Available assets: {}",
+            arch,
+            patterns,
+            available_assets.join(", ")
+        )
     }
 
     /// Download a release asset
-    pub fn download_asset(&self, asset: &GitHubAsset, dest_path: &PathBuf) -> Result<()> {
-        use std::io::Read;
+    pub async fn download_asset(&self, asset: &GitHubAsset, dest_path: &PathBuf) -> Result<()> {
+        use futures::StreamExt;
+        use tokio::io::AsyncWriteExt;
 
-        let client = reqwest::blocking::Client::builder()
+        let client = reqwest::Client::builder()
             .user_agent("obsidian-installation-manager")
-            .build()?;
+            .build()
+            .context("Failed to create HTTP client for download")?;
 
-        let mut response = client
+        let response = client
             .get(&asset.browser_download_url)
             .send()
-            .context("Failed to download asset")?;
+            .await
+            .context(format!(
+                "Failed to connect to download URL. Please check your internet connection. File: {}",
+                asset.name
+            ))?;
 
         if !response.status().is_success() {
-            anyhow::bail!("Download failed with status: {}", response.status());
+            anyhow::bail!(
+                "Download failed for '{}' with status: {}. The file may no longer be available.",
+                asset.name,
+                response.status()
+            );
         }
 
         let total_size = asset.size;
-        let mut file = std::fs::File::create(dest_path)
-            .context("Failed to create download file")?;
+        let mut file = tokio::fs::File::create(dest_path)
+            .await
+            .context(format!(
+                "Failed to create file at '{}'. Check disk space and write permissions.",
+                dest_path.display()
+            ))?;
 
         let mut downloaded: u64 = 0;
-        let mut buffer = [0u8; 8192];
+        let mut stream = response.bytes_stream();
 
         self.broadcast_progress(State::Downloading, 0.0);
 
-        loop {
-            let bytes_read = response.read(&mut buffer)
-                .context("Failed to read from download stream")?;
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.context(format!(
+                "Network error while downloading '{}'. The connection may have been interrupted.",
+                asset.name
+            ))?;
 
-            if bytes_read == 0 {
-                break;
-            }
+            file.write_all(&chunk)
+                .await
+                .context(format!(
+                    "Failed to write to '{}'. Check available disk space.",
+                    dest_path.display()
+                ))?;
 
-            std::io::Write::write_all(&mut file, &buffer[..bytes_read])
-                .context("Failed to write downloaded file")?;
-
-            downloaded += bytes_read as u64;
+            downloaded += chunk.len() as u64;
 
             if total_size > 0 {
                 let progress = downloaded as f32 / total_size as f32;
@@ -414,22 +658,31 @@ impl InstallationManager {
     /// Extract downloaded archive
     pub fn extract_archive(&self, archive_path: &PathBuf, extract_to: &PathBuf) -> Result<()> {
         self.broadcast_progress(State::Extracting, 0.0);
-        std::fs::create_dir_all(extract_to)?;
+        std::fs::create_dir_all(extract_to)
+            .context(format!(
+                "Failed to create extraction directory '{}'. Check write permissions.",
+                extract_to.display()
+            ))?;
 
         let file_name = archive_path
             .file_name()
             .and_then(|n| n.to_str())
-            .context("Invalid archive path")?;
+            .context(format!("Invalid archive path: {}", archive_path.display()))?;
 
         if file_name.ends_with(".tar.gz") || file_name.ends_with(".tgz") {
-            self.extract_tar_gz(archive_path, extract_to)?;
+            self.extract_tar_gz(archive_path, extract_to)
+                .context(format!("Failed to extract TAR.GZ archive '{}'", file_name))?;
         } else if file_name.ends_with(".zip") {
-            self.extract_zip(archive_path, extract_to)?;
+            self.extract_zip(archive_path, extract_to)
+                .context(format!("Failed to extract ZIP archive '{}'", file_name))?;
         } else {
-            anyhow::bail!("Unsupported archive format: {}", file_name);
+            anyhow::bail!(
+                "Unsupported archive format: '{}'. Supported formats: .zip, .tar.gz, .tgz",
+                file_name
+            );
         }
 
-        self.broadcast_progress(State::Extracting, 1.0);
+        // Progress is now reported from within the extraction functions
         Ok(())
     }
 
@@ -437,7 +690,33 @@ impl InstallationManager {
         let file = std::fs::File::open(archive_path)?;
         let decoder = flate2::read::GzDecoder::new(file);
         let mut archive = tar::Archive::new(decoder);
-        archive.unpack(extract_to)?;
+
+        // First pass: calculate total bytes to extract
+        let file_for_count = std::fs::File::open(archive_path)?;
+        let decoder_for_count = flate2::read::GzDecoder::new(file_for_count);
+        let mut archive_for_count = tar::Archive::new(decoder_for_count);
+        let total_bytes: u64 = archive_for_count
+            .entries()?
+            .filter_map(|e| e.ok())
+            .map(|e| e.header().size().unwrap_or(0))
+            .sum();
+
+        // Second pass: extract with progress based on bytes
+        let mut extracted_bytes: u64 = 0;
+        for entry in archive.entries()? {
+            let mut entry = entry?;
+            let entry_size = entry.header().size().unwrap_or(0);
+            entry.unpack_in(extract_to)?;
+
+            extracted_bytes += entry_size;
+            let progress = if total_bytes > 0 {
+                extracted_bytes as f32 / total_bytes as f32
+            } else {
+                1.0
+            };
+            self.broadcast_progress(State::Extracting, progress);
+        }
+
         Ok(())
     }
 
@@ -445,8 +724,19 @@ impl InstallationManager {
         let file = std::fs::File::open(archive_path)?;
         let mut archive = zip::ZipArchive::new(file)?;
 
+        // Calculate total bytes to extract
+        let mut total_bytes: u64 = 0;
+        for i in 0..archive.len() {
+            if let Ok(file) = archive.by_index(i) {
+                total_bytes += file.size();
+            }
+        }
+
+        let mut extracted_bytes: u64 = 0;
+
         for i in 0..archive.len() {
             let mut file = archive.by_index(i)?;
+            let file_size = file.size();
             let outpath = match file.enclosed_name() {
                 Some(path) => extract_to.join(path),
                 None => continue,
@@ -469,14 +759,23 @@ impl InstallationManager {
                     std::fs::set_permissions(&outpath, std::fs::Permissions::from_mode(mode))?;
                 }
             }
+
+            // Report progress based on bytes
+            extracted_bytes += file_size;
+            let progress = if total_bytes > 0 {
+                extracted_bytes as f32 / total_bytes as f32
+            } else {
+                1.0
+            };
+            self.broadcast_progress(State::Extracting, progress);
         }
 
         Ok(())
     }
 
-    /// Install a release
-    pub fn install(&mut self, include_prerelease: bool) -> Result<()> {
-        let release = self.get_latest_release(include_prerelease)?;
+    /// Install a release from the specified channel
+    pub async fn install(&mut self, channel: ReleaseChannel) -> Result<()> {
+        let release = self.get_latest_release(channel).await?;
         let asset = self.select_asset(&release)?;
 
         println!("Installing {} version {}...", self.config.service_name, release.tag_name);
@@ -484,13 +783,20 @@ impl InstallationManager {
 
         // Create temporary download directory
         let temp_dir = std::env::temp_dir().join(format!("oim-{}", self.config.service_name));
-        std::fs::create_dir_all(&temp_dir)?;
+        tokio::fs::create_dir_all(&temp_dir).await?;
 
         let download_path = temp_dir.join(&asset.name);
-        self.download_asset(&asset, &download_path)?;
+        self.download_asset(&asset, &download_path).await?;
 
         println!("Extracting to {}...", self.config.install_path.display());
         self.extract_archive(&download_path, &self.config.install_path)?;
+
+        // Set directory permissions on Windows
+        #[cfg(target_os = "windows")]
+        {
+            win::set_directory_permissions(&self.config.install_path)
+                .context("Failed to set directory permissions")?;
+        }
 
         // Platform-specific installation
         self.broadcast_progress(State::Installing, 0.0);
@@ -513,19 +819,75 @@ impl InstallationManager {
         self.is_installed = true;
 
         // Cleanup
-        std::fs::remove_file(download_path)?;
+        tokio::fs::remove_file(download_path).await?;
 
         println!("Installation complete!");
         Ok(())
     }
 
-    /// Update an existing installation
-    pub fn update(&mut self, include_prerelease: bool) -> Result<()> {
+    /// Repair an existing installation (reinstall files without deleting existing ones)
+    /// This preserves configuration files and user data while updating application files
+    pub async fn repair(&mut self, channel: ReleaseChannel) -> Result<()> {
+        println!("Repairing {} installation...", self.config.service_name);
+
+        let release = self.get_latest_release(channel).await?;
+        let asset = self.select_asset(&release)?;
+
+        println!("Downloading {} version {}...", self.config.service_name, release.tag_name);
+        println!("Downloading {}...", asset.name);
+
+        // Create temporary download directory
+        let temp_dir = std::env::temp_dir().join(format!("oim-{}", self.config.service_name));
+        tokio::fs::create_dir_all(&temp_dir).await?;
+
+        let download_path = temp_dir.join(&asset.name);
+        self.download_asset(&asset, &download_path).await?;
+
+        println!("Extracting to {}... (existing files will be preserved)", self.config.install_path.display());
+        // Extract overwrites files but doesn't delete existing ones
+        self.extract_archive(&download_path, &self.config.install_path)?;
+
+        // Set directory permissions on Windows
+        #[cfg(target_os = "windows")]
+        {
+            win::set_directory_permissions(&self.config.install_path)
+                .context("Failed to set directory permissions")?;
+        }
+
+        // Update version in registry/config without reinstalling service
+        self.broadcast_progress(State::Installing, 0.5);
+
+        #[cfg(target_os = "windows")]
+        {
+            win::set_installed_version(&self.config, &release.tag_name)?;
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            nix::set_installed_version(&self.config, &release.tag_name)?;
+        }
+
+        self.broadcast_progress(State::Installing, 1.0);
+
+        // Update internal state
+        let version_str = release.tag_name.trim_start_matches('v');
+        self.current_version = Some(Version::parse(version_str)?);
+        self.is_installed = true;
+
+        // Cleanup
+        tokio::fs::remove_file(download_path).await?;
+
+        println!("Repair complete!");
+        Ok(())
+    }
+
+    /// Update an existing installation on the specified channel
+    pub async fn update(&mut self, channel: ReleaseChannel) -> Result<()> {
         if !self.is_installed {
             anyhow::bail!("No installation found. Use install() instead.");
         }
 
-        let has_update = self.check_for_updates(include_prerelease)?;
+        let has_update = self.check_for_updates(channel).await?;
         if !has_update {
             println!("Already up to date!");
             return Ok(());
@@ -553,7 +915,7 @@ impl InstallationManager {
         self.broadcast_progress(State::Updating, 0.2);
 
         // Perform installation (which will overwrite existing files)
-        self.install(include_prerelease)?;
+        self.install(channel).await?;
 
         self.broadcast_progress(State::Updating, 0.8);
 
@@ -575,7 +937,7 @@ impl InstallationManager {
     }
 
     /// Uninstall the application
-    pub fn uninstall(&mut self) -> Result<()> {
+    pub async fn uninstall(&mut self) -> Result<()> {
         if !self.is_installed {
             anyhow::bail!("No installation found.");
         }
@@ -595,7 +957,7 @@ impl InstallationManager {
 
         // Remove installation directory
         if self.config.install_path.exists() {
-            std::fs::remove_dir_all(&self.config.install_path)?;
+            tokio::fs::remove_dir_all(&self.config.install_path).await?;
         }
 
         self.is_installed = false;
