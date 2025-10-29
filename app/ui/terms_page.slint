@@ -1,10 +1,9 @@
 import {
     ScrollView,
-    CheckBox,
     VerticalBox,
     HorizontalBox,
 } from "std-widgets.slint";
-import { Theme, CustomButton } from "common.slint";
+import { Theme, CustomButton, Checkbox } from "common.slint";
 
 // Styled text segment for markdown rendering
 export struct TextSegment {
@@ -81,9 +80,9 @@ export component TermsPage inherits Rectangle {
             spacing: 12px;
             height: 32px;
 
-            CheckBox {
+            Checkbox {
                 checked <=> accepted;
-                text: "I accept the Terms of Service";
+                label: "I accept the Terms of Service";
             }
         }
 

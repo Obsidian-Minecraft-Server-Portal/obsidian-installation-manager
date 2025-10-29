@@ -8,6 +8,7 @@ export global Theme {
     in-out property <color> bg-hover: #252528;          // Hover state
     in-out property <color> accent: #1bd96a;            // Primary green (style guide)
     in-out property <color> accent-hover: #15b558;      // Darker green for hover
+    in-out property <color> accent-dark: rgb(10, 50, 38);      // Darker green for hover
     in-out property <color> accent-fg: #000000;         // Text on accent (style guide)
     in-out property <color> text-primary: #ffffff;      // Primary text
     in-out property <color> text-secondary: #eaeaea;    // Secondary text (style guide)
@@ -66,6 +67,7 @@ export component CustomButton inherits Rectangle {
 
     touch := TouchArea {
         enabled: parent.enabled;
+        mouse-cursor: MouseCursor.pointer;
     }
 
     Text {
@@ -75,6 +77,57 @@ export component CustomButton inherits Rectangle {
         font-weight: 700;  // Bold for better readability with pixel fonts
         horizontal-alignment: center;
         vertical-alignment: center;
+    }
+}
+
+export component Checkbox inherits Rectangle {
+    in property <string> label;
+    in-out property <bool> checked: false;
+    callback toggled <=> touch.clicked;
+
+    background: checked ? Theme.accent-dark : transparent;
+    height: 32px;
+
+    HorizontalLayout {
+        spacing: 8px;
+        height: 24px;
+        x: 8px;
+
+        Rectangle {
+            width: 16px;
+            height: 16px;
+            background: checked ? transparent : Theme.bg-tertiary;
+            border-radius: 0px;
+            border-color: checked ? Theme.accent : Theme.border;
+            border-width: 2px;
+            y: 4px;
+
+            states [
+                hover when touch.has-hover: {
+                    background: checked ? Theme.accent-hover : Theme.bg-hover;
+                }
+            ]
+
+            if checked: Rectangle {
+                background: Theme.accent;
+                width: parent.width - 10px;
+                height: parent.height - 10px;
+            }
+        }
+
+        Text {
+            text: root.label;
+            color: Theme.text-secondary;
+            font-size: 14px;
+            vertical-alignment: center;
+        }
+    }
+
+    touch := TouchArea {
+        clicked => {
+            root.checked = !root.checked;
+        }
+        mouse-cursor: MouseCursor.pointer;
     }
 }
 

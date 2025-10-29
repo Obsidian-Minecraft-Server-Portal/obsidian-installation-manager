@@ -1,5 +1,5 @@
-import { LineEdit, CheckBox, ComboBox, VerticalBox, HorizontalBox } from "std-widgets.slint";
-import { Theme, CustomButton } from "common.slint";
+import { LineEdit,  ComboBox, VerticalBox, HorizontalBox } from "std-widgets.slint";
+import { Theme, CustomButton, Checkbox } from "common.slint";
 
 // Location and options selection page
 export component LocationPage inherits Rectangle {
@@ -136,9 +136,9 @@ export component LocationPage inherits Rectangle {
             VerticalLayout {
                 spacing: 6px;
 
-                CheckBox {
+                Checkbox {
                     checked <=> install-as-service;
-                    text: "Install as Windows Service";
+                    label: "Install as Windows Service";
                 }
 
                 Text {
@@ -155,9 +155,9 @@ export component LocationPage inherits Rectangle {
             VerticalLayout {
                 spacing: 6px;
 
-                CheckBox {
+                Checkbox {
                     checked <=> start-with-windows;
-                    text: "Start with Windows";
+                    label: "Start with Windows";
                 }
 
                 Text {
