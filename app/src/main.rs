@@ -173,6 +173,14 @@ async fn run_gui(args: CliArgs) -> Result<()> {
     // Setup basic window handlers
     handlers::setup_handlers(&ui);
 
+    // Apply Windows 11 rounded corners after a short delay to ensure window is fully created
+    let ui_handle_corners = ui.as_weak();
+    slint::Timer::single_shot(std::time::Duration::from_millis(100), move || {
+        if let Some(ui) = ui_handle_corners.upgrade() {
+            window::apply_rounded_corners(&ui.window());
+        }
+    });
+
     // Setup file browser callback
     let ui_handle_browse = ui.as_weak();
     ui.on_browse_folder(move || {
