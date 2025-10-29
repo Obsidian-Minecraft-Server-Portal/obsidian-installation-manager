@@ -733,7 +733,7 @@ fn launch_application(install_path: &str) {
                 #[cfg(target_os = "windows")]
                 {
                     use std::process::Command;
-                    match Command::new("explorer.exe").args(&path).spawn() {
+                    match Command::new("explorer.exe").arg(&path).current_dir(&install_dir).spawn() {
                         Ok(_) => {
                             info!("Application launched successfully, exiting installer");
                             std::process::exit(0);
